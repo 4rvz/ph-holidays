@@ -1,25 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { NAME_PLACEHOLDER, classify, insertHoliday, knownFrom, parseFeed, proclamationId, titleCase } from '../scripts/watch-lib.mjs';
+import { NAME_PLACEHOLDER, classify, decodeLawphil, insertHoliday, knownFrom, parseLawphilIndex, proclamationId, titleCase } from '../scripts/watch-lib.mjs';
 
-// A real search feed saved from https://www.officialgazette.gov.ph/feed/?s=holiday
-const feed = readFileSync(new URL('./fixtures/gazette-holiday-feed.xml', import.meta.url), 'utf8');
+// Real rows from https://lawphil.net/executive/proc/proc2026/proc2026.html, kept in the page's windows-1252 encoding.
+const index = decodeLawphil(readFileSync(new URL('./fixtures/lawphil-proc2026.html', import.meta.url)));
 // A frozen copy of data/2026.json, so these tests don't change as real holidays are added.
 const seed = JSON.parse(readFileSync(new URL('./fixtures/2026-seed.json', import.meta.url), 'utf8'));
 const known = () => knownFrom([{ year: 2026, doc: seed }], 2026);
-const item = (title, text, link = 'https://www.officialgazette.gov.ph/2026/12/01/proclamation-x/') => ({ title, text, link, pubDate: '' });
+const item = (title, text, link = 'https://lawphil.net/executive/proc/proc2026/proc_1500_2026.html') => ({ title, text, link, pubDate: '' });
 
-test('reads titles, links and excerpts from the real feed', () => {
-  const items = parseFeed(feed);
-  assert.equal(items.length, 10);
-  assert.equal(items[1].title, 'Proclamation No. 1264, s. 2026');
-  assert.equal(items[1].link, 'https://www.officialgazette.gov.ph/2026/05/21/proclamation-no-1264-s-2026/');
-  assert.match(items[1].text, /^DECLARING WEDNESDAY, 27 MAY 2026, A REGULAR HOLIDAY THROUGHOUT THE COUNTRY/);
+test('reads numbers, links and titles from the real LawPhil index', () => {
+  const items = parseLawphilIndex(index);
+  assert.equal(items.length, 7);
+  const eid = items.find((it) => it.title === 'Proclamation No. 1264, s. 2026');
+  assert.equal(eid.link, 'https://lawphil.net/executive/proc/proc2026/proc_1264_2026.html');
+  // The curly apostrophe in the windows-1252 page comes out as a plain one.
+  assert.equal(eid.text, "Declaring Wednesday, 27 May 2026, a Regular Holiday Throughout the Country, in Observance of the Eid'l Adha (Feast of Sacrifice)");
+  // The President's name LawPhil appends to some titles is dropped.
+  assert.equal(items.find((it) => it.title.startsWith('Proclamation No. 1265,')).text, 'Amending Proclamtion No. 47 (s. 2001)');
 });
 
-test('on the real feed: Eid proclamations already in data are skipped, local laws are skipped, the 2027 list is found', () => {
-  const results = parseFeed(feed).map((it) => classify(it, known()));
+test('on the real index: Eid proclamations already in data are skipped, local ones are skipped, the 2027 list is found', () => {
+  const results = parseLawphilIndex(index).map((it) => classify(it, known()));
   const actionable = results.filter((r) => r.kind !== 'skip');
   assert.equal(actionable.length, 1);
   assert.equal(actionable[0].kind, 'annual');
@@ -42,7 +45,7 @@ test('a new nationwide regular holiday becomes a ready-to-insert entry', () => {
     date: '2026-12-07',
     name: 'Feast of Something',
     type: 'regular',
-    proclamation: { number: 1500, series: 2026, url: 'https://www.officialgazette.gov.ph/2026/12/01/proclamation-x/' },
+    proclamation: { number: 1500, series: 2026, url: 'https://lawphil.net/executive/proc/proc2026/proc_1500_2026.html' },
   });
 });
 
@@ -106,13 +109,16 @@ test('title-cases names from the excerpt', () => {
   assert.equal(titleCase('ARAW NG KAGITINGAN'), 'Araw ng Kagitingan');
 });
 
-test('reads the real 2026 Eid excerpts exactly as the data has them', () => {
+test('reads the real 2026 Eid titles exactly as the data has them', () => {
   // Pretend the Eid days are not in the data yet.
   const withoutEid = { ...seed, holidays: seed.holidays.filter((h) => !h.name.startsWith('Eid')) };
   const k = knownFrom([{ year: 2026, doc: withoutEid }], 2026);
-  const found = parseFeed(feed).map((it) => classify(it, k)).filter((r) => r.kind === 'holiday').map((r) => r.holiday);
+  const found = parseLawphilIndex(index).map((it) => classify(it, k)).filter((r) => r.kind === 'holiday').map((r) => r.holiday);
+  // Same date, name, type and link as data/2026.json.
+  const inData = seed.holidays.filter((h) => h.name.startsWith('Eid'));
+  assert.deepEqual(found.sort((a, b) => a.date.localeCompare(b.date)), inData);
   assert.deepEqual(found.map(({ date, name, type }) => ({ date, name, type })), [
-    { date: '2026-05-27', name: "Eid'l Adha", type: 'regular' },
     { date: '2026-03-20', name: "Eid'l Fitr", type: 'regular' },
+    { date: '2026-05-27', name: "Eid'l Adha", type: 'regular' },
   ]);
 });

@@ -61,15 +61,19 @@ proclamations a few days before each one, so they get added to the year file dur
 ## Keeping it current
 
 `.github/workflows/watch.yml` runs every day at 06:17 Manila time (or by hand from the Actions tab).
-It reads two Official Gazette search feeds (`?s=holiday` and `?s="throughout the country"`), 5 seconds
-apart, and keeps only **nationwide** proclamations ("THROUGHOUT THE COUNTRY"). It never merges anything.
+It reads LawPhil's proclamation index for this year and last year (two requests) and keeps only
+**nationwide** holiday proclamations ("Throughout the Country"). It never merges anything.
+
+The Official Gazette is the original source, but it blocks GitHub's servers, so the watcher uses
+[LawPhil](https://lawphil.net/executive/proc/proc2026/proc2026.html), which lists every proclamation
+with its full title the same day or soon after.
 
 | What it finds | What it does |
 |---|---|
 | A single nationwide day it can read (date, type, name) | Opens a pull request adding one line to `data/<year>.json` |
 | The annual list for a new year | Opens a pull request with an empty `data/<year>.json` to fill in from the proclamation |
 | Nationwide but unreadable, an amendment to the annual list, or a date already listed | Opens an issue for you to check |
-| Local proclamations, Republic Acts, anything already in the data, past years | Nothing |
+| Local proclamations, other proclamations, anything already in the data, past years | Nothing |
 
 It won't open the same pull request or issue twice, even after you close one. To see what it would do
 without changing anything: `node scripts/watch.mjs --dry-run`.
@@ -83,8 +87,8 @@ One-time setup on GitHub:
    Pull requests and Issues: read and write) as the secret `WATCH_TOKEN`, and checks will run on them.
    Without it, the pull request body still reports whether the checks passed.
 
-If the Gazette starts blocking GitHub's servers, the workflow run fails (shown in red, and GitHub
-emails you) rather than silently missing proclamations.
+If LawPhil can't be reached, the workflow run fails (shown in red, and GitHub emails you) rather
+than silently missing proclamations.
 
 ## Contributing
 

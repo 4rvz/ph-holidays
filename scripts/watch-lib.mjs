@@ -1,4 +1,4 @@
-// Pure helpers for the Official Gazette watcher. No network or git here, so it can be tested offline.
+// Pure helpers for the proclamation watcher. No network or git here, so it can be tested offline.
 
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const MONTH = MONTHS.join('|');
@@ -9,11 +9,27 @@ const SMALL_WORDS = new Set(['of', 'the', 'and', 'ng', 'sa', 'in', 'for']);
 
 export const NAME_PLACEHOLDER = 'TODO: name this holiday';
 
-export function parseFeed(xml) {
-  return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(([, body]) => {
-    const field = (tag) => decode(body.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1] ?? '');
-    return { title: field('title'), link: field('link'), pubDate: field('pubDate'), text: field('description') };
-  });
+// LawPhil's yearly proclamation index, e.g. https://lawphil.net/executive/proc/proc2026/proc2026.html
+// The page is windows-1252, so decode the raw bytes with decodeLawphil() first.
+export function parseLawphilIndex(html) {
+  const items = [];
+  for (const [, row] of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const link = row.match(/<a href="(proc_(\d+)_(\d{4})\.html)">/i);
+    const cells = [...row.matchAll(/<td>([\s\S]*?)<\/td>/gi)].map((m) => m[1]);
+    if (!link || cells.length < 2) continue;
+    const [, file, number, series] = link;
+    items.push({
+      title: `Proclamation No. ${number}, s. ${series}`,
+      link: `https://lawphil.net/executive/proc/proc${series}/${file}`,
+      // LawPhil appends the President's name to some titles in an <a class=tenure>.
+      text: clean(cells[1].replace(/<a class=tenure>[\s\S]*?<\/a>/gi, '')),
+    });
+  }
+  return items;
+}
+
+export function decodeLawphil(bytes) {
+  return new TextDecoder('windows-1252').decode(bytes);
 }
 
 // "Proclamation No. 1264, s. 2026" → { number: 1264, series: 2026 }
@@ -48,11 +64,11 @@ export function classify(item, known) {
     return { ...base, kind: 'annual', year };
   }
 
-  if (!text.includes('THROUGHOUT THE COUNTRY')) return { kind: 'skip', reason: 'local, not nationwide' };
+  if (!text.includes('THROUGHOUT THE COUNTRY')) return { kind: 'skip', reason: 'not a nationwide holiday' };
 
   const date = readDate(text);
   const type = readType(text);
-  if (!date || !type) return { ...base, kind: 'review', reason: 'nationwide, but the date or type could not be read from the excerpt' };
+  if (!date || !type) return { ...base, kind: 'review', reason: 'nationwide, but the date or type could not be read from the title' };
 
   const year = Number(date.slice(0, 4));
   if (year < known.currentYear && !known.years.has(year)) return { kind: 'skip', reason: `past year ${year}` };
@@ -61,8 +77,8 @@ export function classify(item, known) {
   const clash = known.dates.get(date);
   if (clash) return { ...base, kind: 'review', reason: `${date} is already listed as "${clash.name}" (${clash.type})` };
 
-  const url = item.link.startsWith('https://www.officialgazette.gov.ph/') ? item.link : null;
-  if (!url) return { ...base, kind: 'review', reason: 'link is not on www.officialgazette.gov.ph' };
+  const url = item.link.startsWith('https://lawphil.net/') ? item.link : null;
+  if (!url) return { ...base, kind: 'review', reason: 'link is not on lawphil.net' };
 
   return {
     ...base,
@@ -131,14 +147,15 @@ export function titleCase(s) {
     .join(' ');
 }
 
-function decode(s) {
+function clean(s) {
   return s
-    .replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s+/g, ' ')
     .trim();
 }

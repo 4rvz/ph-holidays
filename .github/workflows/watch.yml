@@ -1,4 +1,4 @@
-name: Watch Official Gazette
+name: Watch for new proclamations
 
 on:
   schedule:
