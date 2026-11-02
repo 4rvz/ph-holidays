@@ -1,0 +1,14 @@
+{
+  "name": "ph-holidays",
+  "version": "1.0.0",
+  "description": "Philippine national holidays as static JSON, with the proclamation behind every date.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
+  }
+}

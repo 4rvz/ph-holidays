@@ -1,0 +1,35 @@
+name: Watch Official Gazette
+
+on:
+  schedule:
+    - cron: '17 22 * * *' # 06:17 Manila time, every day
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      # PRs opened with the default token don't trigger "Check and publish" on themselves.
+      # Add a WATCH_TOKEN secret (fine-grained token: contents, pull requests, issues) to get checks on them.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WATCH_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898333+github-actions[bot]@users.noreply.github.com'
+      - run: node scripts/watch.mjs
+        env:
+          GH_TOKEN: ${{ secrets.WATCH_TOKEN || github.token }}
