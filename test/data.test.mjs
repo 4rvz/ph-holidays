@@ -22,6 +22,16 @@ test('2026 regular holidays match the proclamations', () => {
   ]);
 });
 
+// Source: Proc. 1427 s. 2026. Eid'l Fitr and Eid'l Adha get added here when they are proclaimed.
+test('2027 regular holidays match the proclamations', () => {
+  const doc = loadYears().find((y) => y.year === 2027).doc;
+  const regular = doc.holidays.filter((h) => h.type === 'regular').map((h) => h.date);
+  assert.deepEqual(regular, [
+    '2027-01-01', '2027-03-25', '2027-03-26', '2027-04-09', '2027-05-01',
+    '2027-06-12', '2027-08-30', '2027-11-30', '2027-12-25', '2027-12-30',
+  ]);
+});
+
 // Special days can be added during the year, so only check that none of these went missing.
 test('2026 still has the special days from Proc. 1006 s. 2025', () => {
   const doc = loadYears().find((y) => y.year === 2026).doc;
